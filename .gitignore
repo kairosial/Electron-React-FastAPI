@@ -383,3 +383,20 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,macos,python,react,node
+
+# Project specific
+# Generated images
+output/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+
+# Electron build output
+frontend/release/
+frontend/dist-electron/
+
+# Keep example images if needed
+!assets/**/*.jpg
+!assets/**/*.png
