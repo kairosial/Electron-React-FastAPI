@@ -337,6 +337,9 @@ cython_debug/
 # Poetry local configuration file - https://python-poetry.org/docs/configuration/#local-configuration
 poetry.toml
 
+# Poetry cache
+.poetry/
+
 # ruff
 .ruff_cache/
 
