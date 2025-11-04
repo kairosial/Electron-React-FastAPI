@@ -38,13 +38,45 @@ function CameraScreen({ onCapture }) {
 
       <div className="relative rounded-2xl overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.3)] my-8">
         {!isCaptured ? (
-          <Webcam
-            ref={webcamRef}
-            audio={false}
-            screenshotFormat="image/jpeg"
-            videoConstraints={videoConstraints}
-            className="rounded-2xl"
-          />
+          <>
+            <Webcam
+              ref={webcamRef}
+              audio={false}
+              screenshotFormat="image/jpeg"
+              videoConstraints={videoConstraints}
+              className="rounded-2xl"
+            />
+            {/* Face guideline overlay */}
+            <svg
+              className="absolute top-0 left-0 w-full h-full pointer-events-none"
+              viewBox="0 0 1280 720"
+              preserveAspectRatio="xMidYMid slice"
+            >
+              {/* Face oval guideline */}
+              <ellipse
+                cx="640"
+                cy="360"
+                rx="280"
+                ry="360"
+                fill="none"
+                stroke="rgba(255, 255, 255, 0.8)"
+                strokeWidth="4"
+                strokeDasharray="20 15"
+                strokeLinecap="round"
+              />
+              {/* Optional: instruction text */}
+              <text
+                x="640"
+                y="100"
+                textAnchor="middle"
+                fill="rgba(255, 255, 255, 0.9)"
+                fontSize="32"
+                fontWeight="bold"
+              >
+                얼굴이 화면에 나오도록 정렬해주세요
+              </text>
+            </svg>
+          </>
         ) : (
           <img src={capturedImage} alt="촬영된 사진" className="rounded-2xl" />
         )}
