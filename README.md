@@ -1,10 +1,8 @@
-# 나는솔로 키오스크 (Electron-React-FastAPI)
-
-"나는 솔로" 팝업 스토어를 위한 인터랙티브 키오스크 애플리케이션
+# 키오스크 앱 (Electron-React-FastAPI)
 
 ## 프로젝트 개요
 
-사용자가 웹캠으로 사진을 촬영하면, FaceFusion AI를 통해 "나는 솔로" 출연진 스타일의 프로필 사진과 탤런트쇼 이미지를 생성하는 키오스크 앱입니다.
+사용자가 웹캠으로 사진을 촬영하면, FaceFusion AI를 통해 특정 스타일의 이미지를 생성하는 키오스크 앱
 
 ### 주요 기능
 
@@ -23,6 +21,7 @@
 ## 기술 스택
 
 ### Frontend
+
 - **Electron** 33.2.0 - 데스크톱 앱 런타임
 - **React** 18.3.1 - UI 프레임워크
 - **Vite** 5.4.11 - 빌드 도구
@@ -30,6 +29,7 @@
 - **qrcode.react** 4.1.0 - QR 코드 생성
 
 ### Backend
+
 - **FastAPI** 0.104.1 - Python 웹 프레임워크
 - **Uvicorn** 0.24.0 - ASGI 서버
 - **FaceFusion** (예정) - AI 얼굴 합성
@@ -161,6 +161,7 @@ Electron-React-FastAPI/
 현재는 모의 모드로 동작합니다. 실제 FaceFusion을 적용하려면 [backend/README.md](backend/README.md)의 "실제 FaceFusion 적용 방법" 섹션을 참조하세요.
 
 주요 단계:
+
 1. FaceFusion 라이브러리 설치
 2. AI 모델 다운로드
 3. 타겟 이미지 준비 ("나는 솔로" 출연진 이미지)
@@ -235,18 +236,3 @@ npm install
 # 캐시 정리
 npm run clean  # (필요시 package.json에 스크립트 추가)
 ```
-
-## 라이선스
-
-이 프로젝트는 교육 및 프로토타입 목적으로 제작되었습니다.
-
-## 기여
-
-이슈 및 풀 리퀘스트를 환영합니다!
-
-## 참고 자료
-
-- [FaceFusion GitHub](https://github.com/facefusion/facefusion)
-- [FastAPI 문서](https://fastapi.tiangolo.com/)
-- [React 문서](https://react.dev/)
-- [Electron 문서](https://www.electronjs.org/)
