@@ -4,6 +4,7 @@ import CameraScreen from "./components/CameraScreen";
 import LoadingScreen from "./components/LoadingScreen";
 import ProfileResultScreen from "./components/ProfileResultScreen";
 import TalentResultScreen from "./components/TalentResultScreen";
+import { generateProfileImage, generateTalentImage } from "./services/api";
 
 function App() {
   // 현재 화면 상태 관리
@@ -23,28 +24,38 @@ function App() {
   };
 
   // 촬영 완료 -> 로딩 화면
-  const handleCapture = (imageSrc) => {
+  const handleCapture = async (imageSrc) => {
     setCapturedImage(imageSrc);
     setCurrentScreen(3);
 
-    // 실제로는 여기서 백엔드 API 호출
-    // 지금은 3초 후 프로필 결과 화면으로 이동 (테스트용)
-    setTimeout(() => {
-      // 더미 이미지 URL (나중에 백엔드 응답으로 교체)
-      setProfileImageUrl(imageSrc); // 일단 촬영한 이미지 사용
+    try {
+      // 백엔드 API 호출하여 프로필 이미지 생성
+      const result = await generateProfileImage(imageSrc);
+      setProfileImageUrl(result.imageUrl);
       setCurrentScreen(4);
-    }, 3000);
+    } catch (error) {
+      console.error("프로필 이미지 생성 실패:", error);
+      alert(error.message);
+      // 오류 발생 시 촬영 화면으로 돌아가기
+      setCurrentScreen(2);
+    }
   };
 
   // 프로필 결과 -> 장기자랑 생성
-  const handleGenerateTalent = () => {
+  const handleGenerateTalent = async () => {
     setCurrentScreen(3); // 다시 로딩 화면
 
-    // 실제로는 백엔드 API 호출
-    setTimeout(() => {
-      setTalentImageUrl(capturedImage); // 더미
+    try {
+      // 백엔드 API 호출하여 탤런트쇼 이미지 생성
+      const result = await generateTalentImage(capturedImage);
+      setTalentImageUrl(result.imageUrl);
       setCurrentScreen(5);
-    }, 3000);
+    } catch (error) {
+      console.error("탤런트쇼 이미지 생성 실패:", error);
+      alert(error.message);
+      // 오류 발생 시 프로필 결과 화면으로 돌아가기
+      setCurrentScreen(4);
+    }
   };
 
   // 처음으로 돌아가기
