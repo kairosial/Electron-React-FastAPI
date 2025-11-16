@@ -43,7 +43,9 @@ FaceFusion 설정을 위한 환경 변수 파일이 생성되었습니다:
 **파일:** `backend/start.sh`
 
 다음 기능이 추가되었습니다:
-- FaceFusion 경로를 `PYTHONPATH`에 자동 추가
+- **상대 경로 자동 감지**: FaceFusion을 `../facefusion`에서 자동으로 찾음
+- **환경 변수 지원**: `.env`에서 `FACEFUSION_PATH` 설정 가능
+- **경로 검증**: FaceFusion이 올바르게 설치되었는지 자동 확인
 - `.env` 파일 자동 로드
 - Poetry 환경에서 서버 실행
 
@@ -53,6 +55,12 @@ cd backend
 chmod +x start.sh
 ./start.sh
 ```
+
+**작동 방식:**
+1. `.env` 파일에서 `FACEFUSION_PATH` 확인
+2. 설정되지 않았으면 `../facefusion` 경로에서 자동 탐색
+3. `facefusion/__init__.py` 파일 존재 여부로 검증
+4. 찾지 못하면 명확한 에러 메시지 출력
 
 ---
 
