@@ -11,7 +11,7 @@ import uvicorn
 from pathlib import Path
 import logging
 
-from facefusion_service import FaceFusionService
+from backend.facefusion_service import FaceFusionService
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
