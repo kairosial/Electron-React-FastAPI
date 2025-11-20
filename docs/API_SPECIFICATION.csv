@@ -1,0 +1,80 @@
+HTTP 메서드,엔드포인트,UI 플로우 참조,설명,요청 본문/파라미터,응답 (200 OK),에러 응답,관련 모델,비고
+POST,/api/v1/session/start,화면 #2: 개인정보 수집 동의,사용자가 체험을 시작하고 개인정보 수집 동의를 완료할 때 호출. 새로운 체험 세션을 생성하고 고유 UUID를 반환.,"{ ""consent_agreed"": true }","{ ""success"": true, ""data"": { ""participation_id"": 1, ""download_page_uuid"": ""a1b2c3d4-e5f6-..."" }, ""message"": ""Session started successfully"" }","400: consent_agreed가 false인 경우
+500: 데이터베이스 오류","Participation (생성)
+ParticipationHistory (자동 생성)",세션 생성 시 download_page_uuid는 자동으로 UUID4 형식으로 생성됨. ParticipationHistory도 동시에 생성됨.
+PATCH,/api/v1/session/{participation_id}/gender,화면 #3: 성별 선택,사용자가 성별(남성/여성)을 선택할 때 호출. Participation 레코드의 gender 필드를 업데이트.,"Content-Type: application/json
+Path Parameter: participation_id
+Body: { ""gender"": ""male"" } 또는 { ""gender"": ""female"" }","{ ""success"": true, ""data"": { ""participation_id"": 1, ""gender"": ""male"" }, ""message"": ""Gender updated successfully"" }","400: gender 값이 유효하지 않음 ('male' 또는 'female'만 허용)
+404: participation_id가 존재하지 않음
+500: 데이터베이스 오류","Participation (업데이트: gender)
+ParticipationHistory (업데이트: gender)","화면 #3에서 사용자가 남성/여성 버튼 클릭 시 호출. 이후 #4 촬영 단계로 진행."
+POST,/api/v1/session/{participation_id}/upload-image,화면 #4: 얼굴 촬영 및 원본 이미지 저장,사용자가 촬영 버튼을 누르고 3초 카운트다운 후 촬영이 완료되면 호출. 원본 이미지를 서버에 저장하고 경로를 DB에 업데이트.,"Content-Type: multipart/form-data
+Path Parameter: participation_id
+Field: image (file) - 촬영된 이미지 파일","{ ""success"": true, ""data"": { ""participation_id"": 1, ""original_image_path"": ""/uploads/original_20251120_120530.jpg"" }, ""message"": ""Image uploaded successfully"" }","400: 이미지 파일이 없음
+404: participation_id가 존재하지 않음
+413: 파일 크기 초과 (예: 10MB 이상)
+415: 지원하지 않는 파일 형식 (jpg, jpeg, png만 허용)
+500: 파일 저장 실패",Participation (업데이트: original_image_path),"촬영 완료 후 원본 이미지만 저장. 이미지 생성은 별도 엔드포인트에서 수행. 촬영 후 #6 로딩 화면으로 자동 이동."
+GET,/api/v1/session/{uuid},"화면 #7-2, #9-2: 다운로드 페이지 접근",QR 코드 스캔 후 다운로드 페이지에서 세션 정보를 조회할 때 호출. UUID를 통해 생성된 이미지 경로 등을 조회.,Path Parameter: uuid (download_page_uuid),"{ ""success"": true, ""data"": { ""participation_id"": 1, ""gender"": ""male"", ""generated_profile_image_path"": ""/output/profile_20251120_120530_abc123.jpg"", ""generated_talent_image_path"": ""/output/talent_20251120_120530_def456.jpg"", ""selected_profile_name"": ""광수"", ""selected_talent_name"": ""기타 연주"" }, ""message"": ""Session retrieved successfully"" }","404: UUID가 존재하지 않는 경우
+500: 데이터베이스 오류",Participation (조회),다운로드 페이지에서 사용. 생성된 이미지 경로와 선택된 프로필/장기자랑 이름을 반환.
+GET,/api/v1/profiles,백엔드: 성별별 프로필 필터링,사용자 성별에 따라 선택 가능한 프로필 목록을 조회. 화면에서 사용하지 않지만 백엔드 이미지 생성 시 필터링에 활용.,Query Parameter: gender (optional - 'male' 또는 'female'),"{ ""success"": true, ""data"": [ { ""profile_id"": 1, ""profile_name"": ""광수"", ""gender_filter"": ""male"", ""target_image_path"": ""/assets/profile_targets/male_1.jpg"" }, { ""profile_id"": 2, ""profile_name"": ""영호"", ""gender_filter"": ""male"", ""target_image_path"": ""/assets/profile_targets/male_2.jpg"" } ], ""message"": ""Profiles retrieved successfully"" }","400: gender 값이 유효하지 않은 경우 ('male', 'female' 외)
+500: 데이터베이스 오류",TargetProfile (조회),gender 파라미터가 없으면 모든 프로필 반환. 있으면 해당 성별만 필터링.
+GET,/api/v1/talents,백엔드: 성별별 장기자랑 필터링,사용자 성별에 따라 선택 가능한 장기자랑 목록을 조회. 화면에서 사용하지 않지만 백엔드 이미지 생성 시 필터링에 활용.,Query Parameter: gender (optional - 'male' 또는 'female'),"{ ""success"": true, ""data"": [ { ""talent_id"": 1, ""talent_name"": ""기타 연주"", ""gender_filter"": ""male"", ""target_image_path"": ""/assets/talent_targets/male_1.jpg"" }, { ""talent_id"": 2, ""talent_name"": ""춤"", ""gender_filter"": ""male"", ""target_image_path"": ""/assets/talent_targets/male_2.jpg"" } ], ""message"": ""Talents retrieved successfully"" }","400: gender 값이 유효하지 않은 경우 ('male', 'female' 외)
+500: 데이터베이스 오류",TargetTalent (조회),gender 파라미터가 없으면 모든 장기자랑 반환. 있으면 해당 성별만 필터링.
+POST,/api/v1/session/{participation_id}/generate-profile,화면 #6: 프로필 이미지 생성 (로딩 중),로딩 화면 진입 시 자동으로 호출. 이미 저장된 원본 이미지와 성별 정보를 사용하여 FaceFusion으로 프로필 이미지를 생성.,"Content-Type: application/json
+Path Parameter: participation_id
+Body: (Empty) 또는 {}","{ ""success"": true, ""data"": { ""participation_id"": 1, ""selected_profile_id"": 2, ""selected_profile_name"": ""광수"", ""generated_profile_image_path"": ""/output/profile_20251120_120530_abc123.jpg"", ""image_url"": ""http://localhost:8000/images/profile_20251120_120530_abc123.jpg"" }, ""message"": ""Profile image generated successfully"" }","400: original_image_path 또는 gender가 없음
+404: participation_id가 존재하지 않음
+500: FaceFusion 처리 실패 또는 파일 저장 실패
+503: 해당 성별에 매칭할 TargetProfile이 없음","Participation (업데이트: selected_profile_id, generated_profile_image_path)
+TargetProfile (조회 및 랜덤 선택)
+ParticipationHistory (업데이트: selected_profile_name)","1. 기존에 저장된 original_image_path와 gender 사용
+2. gender에 맞는 TargetProfile 중 랜덤 선택
+3. FaceFusion 실행 (현재는 mock 서비스)
+4. 생성된 이미지를 /output/ 폴더에 저장
+5. 로딩 화면은 프론트엔드에서 5초 고정 표시
+6. 완료 후 #7-1 결과 화면으로 이동"
+GET,/api/v1/session/{participation_id}/result,"화면 #7-1, #9-1: 결과 화면에 이미지 및 메타데이터 표시",결과 화면에서 생성된 이미지와 메타데이터(선택된 프로필명/장기자랑명)를 조회. 키오스크 화면에 출력할 정보를 제공.,"Content-Type: application/json
+Path Parameter: participation_id","{ ""success"": true, ""data"": { ""participation_id"": 1, ""gender"": ""male"", ""profile_result"": { ""selected_profile_name"": ""광수"", ""generated_profile_image_path"": ""/output/profile_20251120_120530_abc123.jpg"", ""image_url"": ""http://localhost:8000/images/profile_20251120_120530_abc123.jpg"" }, ""talent_result"": { ""selected_talent_name"": ""기타 연주"", ""generated_talent_image_path"": ""/output/talent_20251120_120530_def456.jpg"", ""image_url"": ""http://localhost:8000/images/talent_20251120_120530_def456.jpg"" }, ""download_page_uuid"": ""a1b2c3d4-e5f6-..."" }, ""message"": ""Result retrieved successfully"" }","404: participation_id가 존재하지 않음
+500: 데이터베이스 오류",Participation (조회),"프로필 또는 장기자랑 이미지가 아직 생성되지 않은 경우 해당 필드는 null로 반환. 화면 #7-1에서는 profile_result만, 화면 #9-1에서는 profile_result와 talent_result 모두 사용."
+POST,/api/v1/session/{participation_id}/generate-talent,화면 #8: 장기자랑 이미지 생성 (로딩 중),"화면 #7-1에서 ""다음 체험으로"" 버튼 클릭 후 로딩 화면 진입 시 호출. 이미 저장된 원본 이미지와 성별 정보를 사용하여 장기자랑 이미지를 생성.","Content-Type: application/json
+Path Parameter: participation_id
+Body: (Empty) 또는 {}","{ ""success"": true, ""data"": { ""participation_id"": 1, ""selected_talent_id"": 8, ""selected_talent_name"": ""기타 연주"", ""generated_talent_image_path"": ""/output/talent_20251120_120530_def456.jpg"", ""image_url"": ""http://localhost:8000/images/talent_20251120_120530_def456.jpg"" }, ""message"": ""Talent image generated successfully"" }","400: original_image_path 또는 gender가 없음
+404: participation_id가 존재하지 않음
+500: FaceFusion 처리 실패 또는 파일 저장 실패
+503: 해당 성별에 매칭할 TargetTalent가 없음","Participation (업데이트: selected_talent_id, generated_talent_image_path)
+TargetTalent (조회 및 랜덤 선택)
+ParticipationHistory (업데이트: selected_talent_name)","1. 기존에 저장된 original_image_path와 gender 사용
+2. gender에 맞는 TargetTalent 중 랜덤 선택
+3. FaceFusion 실행
+4. 생성된 이미지를 /output/ 폴더에 저장
+5. 로딩 화면은 프론트엔드에서 6초 고정 표시
+6. 완료 후 #9-1 결과 화면으로 이동"
+POST,/api/v1/tracking/qr-scan,"화면 #7-1, #9-1: QR 코드 스캔 추적",키오스크에서 QR 코드가 표시되고 사용자가 스캔하여 다운로드 페이지에 접근했을 때 호출. 통계 추적용.,"Content-Type: application/json
+{ ""participation_id"": 1 }","{ ""success"": true, ""data"": { ""participation_id"": 1, ""is_download_page_accessed"": true }, ""message"": ""QR scan tracked successfully"" }","404: participation_id가 존재하지 않음
+500: 데이터베이스 오류","Participation (조회)
+ParticipationHistory (업데이트: is_download_page_accessed = true)","다운로드 페이지 최초 접근 시 호출. ParticipationHistory의 is_download_page_accessed를 true로 업데이트하여 QR 코드 스캔율 추적."
+POST,/api/v1/tracking/download,"화면 #7-2, #9-2: 이미지 다운로드 추적","다운로드 페이지에서 ""사진 다운로드"" 버튼 클릭 시 호출. 프로필/장기자랑 각각의 다운로드 횟수를 추적.","Content-Type: application/json
+{ ""participation_id"": 1, ""image_type"": ""profile"" }
+또는
+{ ""participation_id"": 1, ""image_type"": ""talent"" }","{ ""success"": true, ""data"": { ""participation_id"": 1, ""image_type"": ""profile"", ""download_count"": 1 }, ""message"": ""Download tracked successfully"" }","400: image_type이 유효하지 않음 ('profile' 또는 'talent'만 허용)
+404: participation_id가 존재하지 않음
+500: 데이터베이스 오류","Participation (조회)
+ParticipationHistory (업데이트: download_count_profile 또는 download_count_talent 증가)","image_type에 따라 download_count_profile 또는 download_count_talent를 1씩 증가. 동일 사용자가 여러 번 다운로드하면 카운트도 증가."
+POST,/api/v1/print,"화면 #7-1, #9-1: 인쇄하기 버튼","결과 화면에서 ""인쇄하기"" 버튼 클릭 시 호출. 프린터로 이미지 전송 및 인쇄 로그 기록.","Content-Type: application/json
+{ ""participation_id"": 1, ""image_type"": ""profile"" }
+또는
+{ ""participation_id"": 1, ""image_type"": ""talent"" }","{ ""success"": true, ""data"": { ""print_log_id"": 1, ""participation_id"": 1, ""image_type"": ""profile"", ""printed_at"": ""2025-11-21T10:30:00"" }, ""message"": ""Print job started successfully"" }","400: image_type이 유효하지 않거나 해당 이미지가 아직 생성되지 않음
+404: participation_id가 존재하지 않음
+500: 프린터 연결 실패 또는 인쇄 오류","Participation (조회)
+PrintLog (생성)
+ParticipationHistory (업데이트: is_printed_profile 또는 is_printed_talent = true)","1. PrintLog 테이블에 인쇄 기록 생성
+2. ParticipationHistory의 is_printed_profile 또는 is_printed_talent를 true로 업데이트
+3. 실제 프린터 드라이버/서비스 호출 (구현 예정)"
+GET,/api/v1/dashboard/statistics,관리자: 대시보드 통계 조회,관리자가 전체 통계를 조회. 기간별 필터링 가능. 총 참여자 수/성별 분포/인기 프로필/인기 장기자랑/다운로드율/인쇄율 등 제공.,"Query Parameters:
+- start_date (optional): ""2025-11-01""
+- end_date (optional): ""2025-11-30""","{ ""success"": true, ""data"": { ""total_participations"": 1500, ""gender_distribution"": { ""male"": 800, ""female"": 700 }, ""popular_profiles"": [ { ""profile_name"": ""광수"", ""count"": 300 }, { ""profile_name"": ""영호"", ""count"": 250 } ], ""popular_talents"": [ { ""talent_name"": ""기타 연주"", ""count"": 280 }, { ""talent_name"": ""춤"", ""count"": 220 } ], ""qr_scan_rate"": 0.85, ""download_rate_profile"": 0.72, ""download_rate_talent"": 0.68, ""print_rate_profile"": 0.35, ""print_rate_talent"": 0.30 }, ""message"": ""Statistics retrieved successfully"" }","400: 날짜 형식이 유효하지 않음 (YYYY-MM-DD 형식 필요)
+500: 데이터베이스 오류",ParticipationHistory (집계),"날짜 필터가 없으면 전체 기간 통계 반환. ParticipationHistory 테이블에서 집계하므로 10일 지난 데이터도 조회 가능."
+GET,/api/v1/dashboard/daily-stats,관리자: 일별 통계 조회,관리자가 최근 N일간의 일별 통계를 조회. 날짜별 참여자 수/다운로드 수/인쇄 수 등을 배열로 반환.,"Query Parameter:
+- days (optional, default=7): 조회할 일수 (1-90)","{ ""success"": true, ""data"": [ { ""date"": ""2025-11-21"", ""participations"": 150, ""qr_scans"": 128, ""downloads_profile"": 108, ""downloads_talent"": 102, ""prints_profile"": 52, ""prints_talent"": 48 }, { ""date"": ""2025-11-20"", ""participations"": 142, ""qr_scans"": 120, ""downloads_profile"": 102, ""downloads_talent"": 98, ""prints_profile"": 48, ""prints_talent"": 45 } ], ""message"": ""Daily statistics retrieved successfully"" }","400: days 값이 유효하지 않음 (1-90 범위 외)
+500: 데이터베이스 오류",ParticipationHistory (집계),최근 데이터부터 역순으로 정렬하여 반환. 차트 렌더링에 적합한 형식.
