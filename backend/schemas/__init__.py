@@ -9,6 +9,11 @@ from .participation import (
     ParticipationResponse,
     ParticipationUpdate,
 )
+from .participation_history import (
+    DownloadTrackingRequest,
+    ParticipationHistoryResponse,
+    QRScanTrackingRequest,
+)
 from .print_log import PrintLogCreate, PrintLogResponse
 from .target import TargetProfileResponse, TargetTalentResponse
 
@@ -20,4 +25,7 @@ __all__ = [
     "TargetTalentResponse",
     "PrintLogCreate",
     "PrintLogResponse",
+    "ParticipationHistoryResponse",
+    "DownloadTrackingRequest",
+    "QRScanTrackingRequest",
 ]

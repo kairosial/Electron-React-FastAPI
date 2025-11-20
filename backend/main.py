@@ -3,7 +3,12 @@
 FaceFusion 모의 실행 API
 """
 
-from typing import List
+import asyncio
+import logging
+import uvicorn
+from datetime import datetime
+from pathlib import Path
+from typing import List, Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,26 +16,26 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import logging
-import uvicorn
-from pathlib import Path
-
 from backend.database import get_db, init_db
 from backend.facefusion_service import FaceFusionService
 from backend.repositories import (
+    ParticipationHistoryRepository,
     ParticipationRepository,
     PrintLogRepository,
     ProfileRepository,
     TalentRepository,
 )
 from backend.schemas import (
+    DownloadTrackingRequest,
     ParticipationCreate,
     ParticipationResponse,
     PrintLogCreate,
     PrintLogResponse,
+    QRScanTrackingRequest,
     TargetProfileResponse,
     TargetTalentResponse,
 )
+from backend.scheduler import run_cleanup_on_startup, run_daily_cleanup
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -70,10 +75,17 @@ facefusion_service = FaceFusionService(output_dir=OUTPUT_DIR)
 # 애플리케이션 시작/종료 이벤트
 @app.on_event("startup")
 async def startup_event():
-    """서버 시작 시 데이터베이스 초기화"""
+    """서버 시작 시 데이터베이스 초기화 및 스케줄러 시작"""
     logger.info("데이터베이스 초기화 중...")
     await init_db()
     logger.info("✅ 데이터베이스 초기화 완료")
+
+    # 서버 시작 시 즉시 데이터 정리 실행
+    await run_cleanup_on_startup()
+
+    # 백그라운드에서 일일 정리 작업 실행
+    asyncio.create_task(run_daily_cleanup())
+    logger.info("✅ 데이터 자동 정리 스케줄러 시작 (24시간마다 실행)")
 
 
 @app.on_event("shutdown")
@@ -98,10 +110,10 @@ async def health_check():
     return {"status": "healthy"}
 
 
-# ==================== 새로운 데이터베이스 통합 API ====================
+# ==================== 새로운 데이터베이스 통합 API (v1) ====================
 
 
-@app.get("/api/profiles", response_model=List[TargetProfileResponse])
+@app.get("/api/v1/profiles", response_model=List[TargetProfileResponse])
 async def get_profiles(
     gender: str = None, db: AsyncSession = Depends(get_db)
 ):
@@ -123,7 +135,7 @@ async def get_profiles(
     return profiles
 
 
-@app.get("/api/talents", response_model=List[TargetTalentResponse])
+@app.get("/api/v1/talents", response_model=List[TargetTalentResponse])
 async def get_talents(
     gender: str = None, db: AsyncSession = Depends(get_db)
 ):
@@ -145,7 +157,7 @@ async def get_talents(
     return talents
 
 
-@app.post("/api/session/start", response_model=ParticipationResponse)
+@app.post("/api/v1/session/start", response_model=ParticipationResponse)
 async def start_session(
     data: ParticipationCreate, db: AsyncSession = Depends(get_db)
 ):
@@ -168,7 +180,7 @@ async def start_session(
     return participation
 
 
-@app.get("/api/session/{uuid}", response_model=ParticipationResponse)
+@app.get("/api/v1/session/{uuid}", response_model=ParticipationResponse)
 async def get_session_by_uuid(uuid: str, db: AsyncSession = Depends(get_db)):
     """
     UUID로 세션 조회 (다운로드 페이지용)
@@ -187,7 +199,7 @@ async def get_session_by_uuid(uuid: str, db: AsyncSession = Depends(get_db)):
     return participation
 
 
-@app.post("/api/print", response_model=PrintLogResponse)
+@app.post("/api/v1/print", response_model=PrintLogResponse)
 async def create_print_log(
     data: PrintLogCreate, db: AsyncSession = Depends(get_db)
 ):
@@ -208,10 +220,10 @@ async def create_print_log(
     return print_log
 
 
-@app.get("/api/statistics")
+@app.get("/api/v1/statistics")
 async def get_statistics(db: AsyncSession = Depends(get_db)):
     """
-    전체 통계 조회
+    전체 통계 조회 (기존 - 호환성 유지)
 
     Args:
         db: 데이터베이스 세션
@@ -231,7 +243,136 @@ async def get_statistics(db: AsyncSession = Depends(get_db)):
     }
 
 
-@app.post("/api/generate/profile")
+# ==================== ParticipationHistory 추적 API ====================
+
+
+@app.post("/api/v1/tracking/qr-scan")
+async def track_qr_scan(data: QRScanTrackingRequest, db: AsyncSession = Depends(get_db)):
+    """
+    QR 코드 스캔 추적 (다운로드 페이지 접근)
+
+    사용자가 QR 코드를 스캔하여 다운로드 페이지에 접근하면 호출됩니다.
+
+    Args:
+        data: QR 스캔 추적 데이터 (uuid)
+        db: 데이터베이스 세션
+
+    Returns:
+        추적 완료 여부
+    """
+    # UUID로 Participation 조회
+    participation_repo = ParticipationRepository(db)
+    participation = await participation_repo.get_by_uuid(data.uuid)
+
+    if not participation:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+    # ParticipationHistory 업데이트
+    history_repo = ParticipationHistoryRepository(db)
+    await history_repo.update_download_page_accessed(participation.participation_id)
+
+    return {"success": True, "message": "QR 스캔이 기록되었습니다."}
+
+
+@app.post("/api/v1/tracking/download")
+async def track_download(
+    data: DownloadTrackingRequest, db: AsyncSession = Depends(get_db)
+):
+    """
+    다운로드 버튼 클릭 추적
+
+    사용자가 다운로드 페이지에서 프로필 또는 장기자랑 이미지를 다운로드하면 호출됩니다.
+
+    Args:
+        data: 다운로드 추적 데이터 (participation_id, image_type)
+        db: 데이터베이스 세션
+
+    Returns:
+        추적 완료 여부
+    """
+    if data.image_type not in ["profile", "talent"]:
+        raise HTTPException(
+            status_code=400, detail="image_type은 'profile' 또는 'talent'여야 합니다."
+        )
+
+    # ParticipationHistory 업데이트
+    history_repo = ParticipationHistoryRepository(db)
+    await history_repo.increment_download_count(
+        data.participation_id, data.image_type
+    )
+
+    return {
+        "success": True,
+        "message": f"{data.image_type} 다운로드가 기록되었습니다.",
+    }
+
+
+# ==================== 대시보드 통계 API ====================
+
+
+@app.get("/api/v1/dashboard/statistics")
+async def get_dashboard_statistics(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    대시보드용 종합 통계 조회
+
+    ParticipationHistory 기반으로 영구 보관된 통계 데이터를 반환합니다.
+
+    Args:
+        start_date: 시작 날짜 (YYYY-MM-DD, 선택사항)
+        end_date: 종료 날짜 (YYYY-MM-DD, 선택사항)
+        db: 데이터베이스 세션
+
+    Returns:
+        종합 통계 데이터
+    """
+    history_repo = ParticipationHistoryRepository(db)
+
+    # 날짜 파싱
+    start_dt = None
+    end_dt = None
+    if start_date:
+        start_dt = datetime.fromisoformat(start_date)
+    if end_date:
+        end_dt = datetime.fromisoformat(end_date)
+
+    statistics = await history_repo.get_statistics(start_dt, end_dt)
+
+    return {
+        "success": True,
+        "data": statistics,
+        "period": {
+            "start": start_date if start_date else "전체",
+            "end": end_date if end_date else "현재",
+        },
+    }
+
+
+@app.get("/api/v1/dashboard/daily-stats")
+async def get_daily_statistics(days: int = 7, db: AsyncSession = Depends(get_db)):
+    """
+    일별 통계 조회 (최근 N일)
+
+    Args:
+        days: 조회할 일수 (기본값: 7일)
+        db: 데이터베이스 세션
+
+    Returns:
+        일별 통계 리스트
+    """
+    if days < 1 or days > 365:
+        raise HTTPException(status_code=400, detail="days는 1-365 사이여야 합니다.")
+
+    history_repo = ParticipationHistoryRepository(db)
+    daily_stats = await history_repo.get_daily_stats(days)
+
+    return {"success": True, "days": days, "data": daily_stats}
+
+
+@app.post("/api/v1/generate/profile")
 async def generate_profile_image(file: UploadFile = File(...)):
     """
     프로필 이미지 생성 (모의 FaceFusion 실행)
@@ -278,7 +419,7 @@ async def generate_profile_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/generate/talent")
+@app.post("/api/v1/generate/talent")
 async def generate_talent_image(file: UploadFile = File(...)):
     """
     탤런트쇼 이미지 생성 (모의 FaceFusion 실행)
