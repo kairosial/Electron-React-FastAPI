@@ -43,9 +43,9 @@ class SessionService:
             raise ValueError("Consent must be agreed")
 
         # Participation 생성
-        participation = await self.participation_repo.create({
-            "consent_agreed": consent_agreed
-        })
+        participation = await self.participation_repo.create(
+            consent_agreed=consent_agreed
+        )
 
         # ParticipationHistory 생성
         await self.history_repo.create_from_participation(

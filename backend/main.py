@@ -12,6 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 from backend.core.config import settings
+from backend.database import init_db
 from backend.middleware.error_handler import (
     app_exception_handler,
     validation_exception_handler,
@@ -90,6 +91,10 @@ async def startup_event():
     logger.info(f"API Prefix: {settings.api_prefix}")
     logger.info(f"FaceFusion Mode: {settings.facefusion.mode}")
     logger.info(f"Scheduler Enabled: {settings.scheduler.enabled}")
+
+    # 데이터베이스 초기화
+    await init_db()
+    logger.info("Database initialized successfully")
 
     # 스케줄러가 활성화된 경우에만 실행
     if settings.scheduler.enabled:

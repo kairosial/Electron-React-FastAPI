@@ -30,7 +30,7 @@ class ParticipationHistory(Base):
     )
 
     # 2. 분석용 메타데이터 (개인정보 제외)
-    gender = Column(String(10), nullable=False, comment="사용자 성별 (male/female)")
+    gender = Column(String(10), nullable=True, comment="사용자 성별 (male/female)")
     selected_profile_name = Column(
         String(100), nullable=True, comment="선택한 프로필 이름 (예: 광수)"
     )

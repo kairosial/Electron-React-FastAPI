@@ -28,11 +28,11 @@ class Participation(Base):
     consent_agreed = Column(
         Boolean, default=False, nullable=False, comment="개인정보 수집/이용 동의 여부"
     )
-    gender = Column(String(10), nullable=False, comment="사용자가 선택한 성별 (male/female)")
+    gender = Column(String(10), nullable=True, comment="사용자가 선택한 성별 (male/female)")
 
     # 원본 이미지
     original_image_path = Column(
-        String(512), nullable=False, comment="키오스크에서 촬영한 원본 사진 경로"
+        String(512), nullable=True, comment="키오스크에서 촬영한 원본 사진 경로"
     )
 
     # 선택된 타겟 (Foreign Keys)
