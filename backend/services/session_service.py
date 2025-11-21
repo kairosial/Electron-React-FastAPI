@@ -153,8 +153,10 @@ class SessionService:
         Raises:
             SessionNotFoundException: 세션을 찾을 수 없음
         """
-        # 세션 조회
-        participation = await self.participation_repo.get_by_id(participation_id)
+        # 세션 조회 (관계 데이터 포함)
+        participation = await self.participation_repo.get_by_id(
+            participation_id, load_relations=True
+        )
         if not participation:
             raise SessionNotFoundException(participation_id)
 
@@ -163,7 +165,7 @@ class SessionService:
         if participation.generated_profile_image_path:
             filename = participation.generated_profile_image_path.split("/")[-1]
             profile_result = {
-                "selected_profile_name": participation.target_profile.profile_name if participation.target_profile else None,
+                "selected_profile_name": participation.selected_profile.profile_name if participation.selected_profile else None,
                 "generated_profile_image_path": participation.generated_profile_image_path,
                 "image_url": self.file_handler.get_image_url(filename),
             }
@@ -173,7 +175,7 @@ class SessionService:
         if participation.generated_talent_image_path:
             filename = participation.generated_talent_image_path.split("/")[-1]
             talent_result = {
-                "selected_talent_name": participation.target_talent.talent_name if participation.target_talent else None,
+                "selected_talent_name": participation.selected_talent.talent_name if participation.selected_talent else None,
                 "generated_talent_image_path": participation.generated_talent_image_path,
                 "image_url": self.file_handler.get_image_url(filename),
             }
@@ -199,8 +201,10 @@ class SessionService:
         Raises:
             SessionNotFoundException: 세션을 찾을 수 없음
         """
-        # UUID로 조회
-        participation = await self.participation_repo.get_by_uuid(uuid)
+        # UUID로 조회 (관계 데이터 포함)
+        participation = await self.participation_repo.get_by_uuid(
+            uuid, load_relations=True
+        )
         if not participation:
             raise SessionNotFoundException(uuid)
 
@@ -209,6 +213,6 @@ class SessionService:
             "gender": participation.gender,
             "generated_profile_image_path": participation.generated_profile_image_path,
             "generated_talent_image_path": participation.generated_talent_image_path,
-            "selected_profile_name": participation.target_profile.profile_name if participation.target_profile else None,
-            "selected_talent_name": participation.target_talent.talent_name if participation.target_talent else None,
+            "selected_profile_name": participation.selected_profile.profile_name if participation.selected_profile else None,
+            "selected_talent_name": participation.selected_talent.talent_name if participation.selected_talent else None,
         }

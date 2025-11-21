@@ -21,33 +21,86 @@ class ParticipationHistoryRepository(BaseRepository[ParticipationHistory]):
         super().__init__(ParticipationHistory, db)
 
     async def create_from_participation(
-        self,
-        participation_id: int,
-        gender: str,
-        profile_name: str = None,
-        talent_name: str = None,
+        self, participation_id: int
     ) -> ParticipationHistory:
         """
-        Participation 데이터로부터 이력 생성
+        Participation 데이터로부터 이력 생성 (초기 생성용)
 
         Args:
             participation_id: 원본 참여 ID
-            gender: 성별
-            profile_name: 선택한 프로필 이름
-            talent_name: 선택한 장기자랑 이름
 
         Returns:
             생성된 ParticipationHistory
         """
         return await self.create(
             original_participation_id=participation_id,
-            gender=gender,
-            selected_profile_name=profile_name,
-            selected_talent_name=talent_name,
         )
 
+    async def update_gender(
+        self, participation_id: int, gender: str
+    ) -> None:
+        """
+        성별 업데이트
+
+        Args:
+            participation_id: 원본 참여 ID
+            gender: 성별 ('male' 또는 'female')
+        """
+        result = await self.db.execute(
+            select(ParticipationHistory).where(
+                ParticipationHistory.original_participation_id == participation_id
+            )
+        )
+        history = result.scalar_one_or_none()
+
+        if history:
+            history.gender = gender
+            await self.db.flush()
+
+    async def update_profile(
+        self, participation_id: int, profile_name: str
+    ) -> None:
+        """
+        선택된 프로필 정보 업데이트
+
+        Args:
+            participation_id: 원본 참여 ID
+            profile_name: 선택된 프로필 이름
+        """
+        result = await self.db.execute(
+            select(ParticipationHistory).where(
+                ParticipationHistory.original_participation_id == participation_id
+            )
+        )
+        history = result.scalar_one_or_none()
+
+        if history:
+            history.selected_profile_name = profile_name
+            await self.db.flush()
+
+    async def update_talent(
+        self, participation_id: int, talent_name: str
+    ) -> None:
+        """
+        선택된 장기자랑 정보 업데이트
+
+        Args:
+            participation_id: 원본 참여 ID
+            talent_name: 선택된 장기자랑 이름
+        """
+        result = await self.db.execute(
+            select(ParticipationHistory).where(
+                ParticipationHistory.original_participation_id == participation_id
+            )
+        )
+        history = result.scalar_one_or_none()
+
+        if history:
+            history.selected_talent_name = talent_name
+            await self.db.flush()
+
     async def update_print_status(
-        self, participation_id: int, image_type: str
+        self, participation_id: int, image_type: str, is_printed: bool
     ) -> None:
         """
         인쇄 상태 업데이트
@@ -55,6 +108,7 @@ class ParticipationHistoryRepository(BaseRepository[ParticipationHistory]):
         Args:
             participation_id: 원본 참여 ID
             image_type: 'profile' 또는 'talent'
+            is_printed: 인쇄 여부
         """
         result = await self.db.execute(
             select(ParticipationHistory).where(
@@ -65,17 +119,20 @@ class ParticipationHistoryRepository(BaseRepository[ParticipationHistory]):
 
         if history:
             if image_type == "profile":
-                history.is_printed_profile = True
+                history.is_printed_profile = is_printed
             elif image_type == "talent":
-                history.is_printed_talent = True
+                history.is_printed_talent = is_printed
             await self.db.flush()
 
-    async def update_download_page_accessed(self, participation_id: int) -> None:
+    async def update_qr_scan_status(
+        self, participation_id: int, is_accessed: bool
+    ) -> None:
         """
-        다운로드 페이지 접근 상태 업데이트 (QR 스캔)
+        QR 스캔 / 다운로드 페이지 접근 상태 업데이트
 
         Args:
             participation_id: 원본 참여 ID
+            is_accessed: 접근 여부
         """
         result = await self.db.execute(
             select(ParticipationHistory).where(
@@ -85,18 +142,21 @@ class ParticipationHistoryRepository(BaseRepository[ParticipationHistory]):
         history = result.scalar_one_or_none()
 
         if history:
-            history.is_download_page_accessed = True
+            history.is_download_page_accessed = is_accessed
             await self.db.flush()
 
     async def increment_download_count(
         self, participation_id: int, image_type: str
-    ) -> None:
+    ) -> int:
         """
         다운로드 횟수 증가
 
         Args:
             participation_id: 원본 참여 ID
             image_type: 'profile' 또는 'talent'
+
+        Returns:
+            업데이트된 다운로드 카운트
         """
         result = await self.db.execute(
             select(ParticipationHistory).where(
@@ -108,9 +168,15 @@ class ParticipationHistoryRepository(BaseRepository[ParticipationHistory]):
         if history:
             if image_type == "profile":
                 history.download_count_profile += 1
+                count = history.download_count_profile
             elif image_type == "talent":
                 history.download_count_talent += 1
+                count = history.download_count_talent
+            else:
+                count = 0
             await self.db.flush()
+            return count
+        return 0
 
     async def get_statistics(
         self, start_date: datetime = None, end_date: datetime = None
@@ -254,3 +320,15 @@ class ParticipationHistoryRepository(BaseRepository[ParticipationHistory]):
             {"date": date, **stats}
             for date, stats in sorted(daily_data.items(), key=lambda x: x[0])
         ]
+
+    async def get_daily_statistics(self, days: int = 7) -> List[Dict]:
+        """
+        일별 통계 조회 (get_daily_stats의 별칭)
+
+        Args:
+            days: 조회할 일수
+
+        Returns:
+            일별 통계 리스트
+        """
+        return await self.get_daily_stats(days)

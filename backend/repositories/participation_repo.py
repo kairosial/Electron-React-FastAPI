@@ -166,3 +166,28 @@ class ParticipationRepository(BaseRepository[Participation]):
         await self.db.flush()
         await self.db.refresh(participation)
         return participation
+
+    async def update(
+        self, participation_id: int, data: dict
+    ) -> Optional[Participation]:
+        """
+        참여 세션 정보 업데이트 (서비스 레이어용)
+
+        Args:
+            participation_id: 참여 ID
+            data: 업데이트할 데이터 딕셔너리
+
+        Returns:
+            업데이트된 Participation 또는 None
+        """
+        participation = await self.get_by_id(participation_id)
+        if not participation:
+            return None
+
+        for key, value in data.items():
+            if hasattr(participation, key):
+                setattr(participation, key, value)
+
+        await self.db.flush()
+        await self.db.refresh(participation)
+        return participation
