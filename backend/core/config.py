@@ -95,6 +95,10 @@ class FaceFusionSettings(BaseSettings):
 class SchedulerSettings(BaseSettings):
     """스케줄러 관련 설정"""
 
+    enabled: bool = Field(
+        default=False,
+        description="Enable scheduler for data cleanup (set to true in production)"
+    )
     cleanup_interval_hours: int = Field(
         default=24,
         description="Interval between cleanup jobs in hours"

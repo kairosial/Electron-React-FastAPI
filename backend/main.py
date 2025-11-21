@@ -89,12 +89,18 @@ async def startup_event():
     logger.info(f"Environment: {settings.environment}")
     logger.info(f"API Prefix: {settings.api_prefix}")
     logger.info(f"FaceFusion Mode: {settings.facefusion.mode}")
+    logger.info(f"Scheduler Enabled: {settings.scheduler.enabled}")
 
-    # 초기 데이터 정리
-    await run_cleanup_on_startup()
+    # 스케줄러가 활성화된 경우에만 실행
+    if settings.scheduler.enabled:
+        # 초기 데이터 정리
+        await run_cleanup_on_startup()
 
-    # 일일 정리 스케줄러 시작
-    await run_daily_cleanup()
+        # 일일 정리 스케줄러를 백그라운드 태스크로 시작
+        import asyncio
+        asyncio.create_task(run_daily_cleanup())
+    else:
+        logger.info("⏸️  데이터 정리 스케줄러가 비활성화되어 있습니다.")
 
     logger.info("Application started successfully")
 
@@ -110,7 +116,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        "main_new:app",
+        "main:app",
         host=settings.host,
         port=settings.port,
         reload=settings.reload and settings.is_development,

@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import delete, select
 
+from backend.core.config import settings
 from backend.database import AsyncSessionLocal
 from backend.models.participation import Participation
 
@@ -23,6 +24,10 @@ async def cleanup_old_participations():
     개인정보 보호를 위해 10일 이상 된 참여 데이터를 삭제합니다.
     ParticipationHistory는 유지되므로 통계 분석은 계속 가능합니다.
     """
+    if not settings.scheduler.enabled:
+        logger.info("⏸️  스케줄러가 비활성화되어 있어 데이터 정리를 건너뜁니다.")
+        return
+
     try:
         async with AsyncSessionLocal() as session:
             # 10일 전 날짜 계산
@@ -60,6 +65,10 @@ async def run_daily_cleanup():
 
     24시간마다 cleanup_old_participations()를 실행합니다.
     """
+    if not settings.scheduler.enabled:
+        logger.info("⏸️  스케줄러가 비활성화되어 있습니다. 데이터 정리가 실행되지 않습니다.")
+        return
+
     while True:
         try:
             logger.info("📅 일일 데이터 정리 작업 시작...")
@@ -81,5 +90,9 @@ async def run_cleanup_on_startup():
     서버가 오랫동안 꺼져 있었을 경우를 대비하여
     시작 시 바로 정리 작업을 실행합니다.
     """
+    if not settings.scheduler.enabled:
+        logger.info("⏸️  스케줄러가 비활성화되어 있습니다.")
+        return
+
     logger.info("🚀 서버 시작 시 데이터 정리 작업 실행...")
     await cleanup_old_participations()
