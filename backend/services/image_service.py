@@ -76,9 +76,17 @@ class ImageService:
 
         # FaceFusion 실행
         try:
+            # DB에 저장된 상대 경로를 절대 경로로 변환
+            source_abs_path = self.file_handler.get_absolute_path(
+                participation.original_image_path
+            )
+            target_abs_path = self.file_handler.get_absolute_path(
+                selected_profile.target_image_path
+            )
+
             await self.facefusion.generate_image(
-                source_path=participation.original_image_path,
-                target_path=selected_profile.target_image_path,
+                source_path=source_abs_path,
+                target_path=target_abs_path,
                 output_path=output_path
             )
         except Exception as e:
@@ -151,9 +159,17 @@ class ImageService:
 
         # FaceFusion 실행
         try:
+            # DB에 저장된 상대 경로를 절대 경로로 변환
+            source_abs_path = self.file_handler.get_absolute_path(
+                participation.original_image_path
+            )
+            target_abs_path = self.file_handler.get_absolute_path(
+                selected_talent.target_image_path
+            )
+
             await self.facefusion.generate_image(
-                source_path=participation.original_image_path,
-                target_path=selected_talent.target_image_path,
+                source_path=source_abs_path,
+                target_path=target_abs_path,
                 output_path=output_path
             )
         except Exception as e:

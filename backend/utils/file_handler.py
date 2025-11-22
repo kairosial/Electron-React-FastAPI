@@ -137,6 +137,22 @@ class FileHandler:
         """
         return str(self.output_dir / filename)
 
+    def get_absolute_path(self, relative_path: str) -> str:
+        """
+        상대 경로를 절대 경로로 변환
+
+        Args:
+            relative_path: DB에 저장된 상대 경로 (예: /uploads/file.jpg)
+
+        Returns:
+            절대 경로
+        """
+        # /uploads/file.jpg -> ./uploads/file.jpg -> 절대 경로
+        if relative_path.startswith('/'):
+            relative_path = relative_path[1:]  # 맨 앞의 / 제거
+
+        return str(Path.cwd() / relative_path)
+
     def get_image_url(self, filename: str, request_host: str = "http://localhost:8000") -> str:
         """
         이미지 URL 생성

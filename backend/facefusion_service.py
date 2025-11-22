@@ -1,191 +1,267 @@
 """
-FaceFusion 모의 실행 서비스
+FaceFusion 실행 서비스
 
-실제 FaceFusion AI 모델을 실행하지 않고, 가짜로 이미지 처리를 시뮬레이션합니다.
-업로드된 이미지를 그대로 저장하고, 처리 시간을 시뮬레이션하여 마치 AI가 동작하는 것처럼 보이게 합니다.
+facefusion 모듈을 직접 import하여 실제 얼굴 합성을 수행합니다.
+모델을 메모리에 한 번만 로드하고 재사용하여 효율적으로 처리합니다.
 """
 
-import asyncio
-import uuid
-from pathlib import Path
-from datetime import datetime
+import sys
 import logging
+from pathlib import Path
+from typing import Optional
+
+from backend.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 
 class FaceFusionService:
-    """FaceFusion 모의 실행 서비스 클래스"""
+    """FaceFusion 실행 서비스 클래스"""
 
-    def __init__(self, output_dir: Path):
-        """
-        Args:
-            output_dir: 생성된 이미지를 저장할 디렉토리
-        """
-        self.output_dir = output_dir
-        self.output_dir.mkdir(exist_ok=True)
-        logger.info(f"FaceFusion 모의 서비스 초기화 완료: {output_dir}")
+    def __init__(self):
+        """FaceFusion 서비스 초기화"""
+        self.mode = settings.facefusion.mode
+        self.facefusion_path = Path(settings.facefusion.project_path).resolve()
+        self.face_swapper_model = settings.facefusion.face_swapper_model
+        self.execution_providers = settings.facefusion.execution_providers
 
-    async def generate_profile_image(
+        # facefusion 모듈 import를 위한 경로 추가
+        if str(self.facefusion_path) not in sys.path:
+            sys.path.insert(0, str(self.facefusion_path))
+
+        # facefusion 모듈 초기화 (real 모드일 때만)
+        self._facefusion_initialized = False
+        self._state_manager = None
+        self._image_to_image = None
+
+        if self.mode == "real":
+            self._initialize_facefusion()
+
+        logger.info(f"FaceFusion 서비스 초기화 완료")
+        logger.info(f"Mode: {self.mode}")
+        logger.info(f"FaceFusion path: {self.facefusion_path}")
+
+    def _initialize_facefusion(self):
+        """FaceFusion 모듈 초기화"""
+        try:
+            logger.info(f"FaceFusion 모듈 import 시작... (path: {self.facefusion_path})")
+
+            # facefusion 모듈 import
+            from facefusion import state_manager
+            from facefusion.workflows import image_to_image
+            from facefusion import logger as ff_logger
+
+            self._state_manager = state_manager
+            self._image_to_image = image_to_image
+
+            logger.info("FaceFusion 모듈 import 성공")
+
+            # FaceFusion 로거 설정 (선택사항)
+            # ff_logger.init('info')
+
+            # 기본 설정 초기화
+            logger.info("FaceFusion 기본 설정 초기화 시작...")
+            self._init_default_state()
+            logger.info("FaceFusion 기본 설정 초기화 완료")
+
+            self._facefusion_initialized = True
+            logger.info("✅ FaceFusion 모듈 초기화 완료")
+
+        except ImportError as e:
+            logger.error(f"❌ FaceFusion 모듈 import 실패: {e}")
+            logger.error(f"PYTHONPATH에 {self.facefusion_path}가 추가되었는지 확인하세요")
+            raise RuntimeError(f"FaceFusion 모듈을 찾을 수 없습니다: {e}")
+        except Exception as e:
+            logger.error(f"❌ FaceFusion 초기화 중 오류: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise
+
+    def _init_default_state(self):
+        """FaceFusion state manager 기본 설정"""
+        # 프로세서 설정
+        self._state_manager.init_item('processors', ['face_swapper'])
+
+        # Face swapper 모델 설정
+        self._state_manager.init_item('face_swapper_model', self.face_swapper_model)
+
+        # Execution provider 설정
+        self._state_manager.init_item('execution_providers', self.execution_providers)
+        self._state_manager.init_item('execution_device_ids', ['0'])  # CPU 또는 GPU 디바이스 ID (문자열 리스트)
+        self._state_manager.init_item('execution_thread_count', 8)  # 실행 스레드 수
+        self._state_manager.init_item('execution_queue_count', 1)
+
+        # Download 설정 (NSFW 체크 등에 필요)
+        self._state_manager.init_item('download_providers', ['github'])
+        self._state_manager.init_item('download_scope', 'full')
+
+        # Face detector 설정
+        self._state_manager.init_item('face_detector_model', 'yolo_face')
+        self._state_manager.init_item('face_detector_size', '640x640')
+        self._state_manager.init_item('face_detector_score', 0.5)
+        self._state_manager.init_item('face_detector_angles', [0])
+        self._state_manager.init_item('face_detector_margin', [0, 0, 0, 0])
+
+        # Face landmarker 설정
+        self._state_manager.init_item('face_landmarker_model', '2dfan4')
+        self._state_manager.init_item('face_landmarker_score', 0.5)
+
+        # Face selector 설정
+        self._state_manager.init_item('face_selector_mode', 'reference')
+        self._state_manager.init_item('face_selector_order', 'large-small')
+        self._state_manager.init_item('face_selector_age_start', None)
+        self._state_manager.init_item('face_selector_age_end', None)
+        self._state_manager.init_item('face_selector_gender', None)
+        self._state_manager.init_item('face_selector_race', None)
+        self._state_manager.init_item('reference_face_position', 0)
+        self._state_manager.init_item('reference_face_distance', 0.3)
+        self._state_manager.init_item('reference_frame_number', 0)
+
+        # Face masker 설정
+        self._state_manager.init_item('face_mask_types', ['box'])
+        self._state_manager.init_item('face_mask_blur', 0.3)
+        self._state_manager.init_item('face_mask_padding', [0, 0, 0, 0])
+        self._state_manager.init_item('face_mask_regions', [])
+        self._state_manager.init_item('face_mask_areas', [])
+        self._state_manager.init_item('face_occluder_model', 'xseg_1')
+        self._state_manager.init_item('face_parser_model', 'bisenet_resnet_34')
+
+        # Face swapper 추가 설정
+        self._state_manager.init_item('face_swapper_pixel_boost', '128x128')
+        self._state_manager.init_item('face_swapper_weight', 1.0)
+
+        # Memory 설정
+        self._state_manager.init_item('video_memory_strategy', 'strict')
+        self._state_manager.init_item('system_memory_limit', 0)
+
+        # Output 설정
+        self._state_manager.init_item('output_image_quality', 80)
+        self._state_manager.init_item('output_image_scale', 1.0)
+
+        # Temp 설정
+        self._state_manager.init_item('temp_path', '.facefusion')  # Temp 디렉토리 경로
+        self._state_manager.init_item('temp_frame_format', 'jpg')
+        self._state_manager.init_item('keep_temp', False)
+
+        # 기타 필수 설정
+        self._state_manager.init_item('log_level', 'error')
+
+        logger.debug("FaceFusion 기본 설정 완료")
+
+    async def generate_image(
         self,
-        image_data: bytes,
-        original_filename: str
-    ) -> str:
+        source_path: str,
+        target_path: str,
+        output_path: str
+    ) -> None:
         """
-        프로필 이미지 생성 시뮬레이션
+        얼굴 합성 이미지 생성
 
-        실제로는 업로드된 이미지를 그대로 저장하고,
-        AI 처리 시간을 시뮬레이션하기 위해 딜레이를 추가합니다.
+        source_path의 얼굴을 target_path의 이미지에 합성하여 output_path에 저장합니다.
 
         Args:
-            image_data: 업로드된 이미지 데이터 (bytes)
-            original_filename: 원본 파일명
+            source_path: 원본 이미지 경로 (사용자가 업로드한 이미지)
+            target_path: 타겟 이미지 경로 (프로필 또는 탤런트 이미지)
+            output_path: 출력 이미지 경로
 
-        Returns:
-            생성된 이미지 파일명
+        Raises:
+            FileNotFoundError: 입력 파일이 존재하지 않음
+            RuntimeError: FaceFusion 실행 실패
         """
-        logger.info("프로필 이미지 생성 시작 (모의 실행)")
+        if self.mode == "mock":
+            logger.warning("Mock mode: Face fusion is disabled, using mock implementation")
+            await self._mock_generate_image(source_path, target_path, output_path)
+            return
 
-        # 1. AI 처리 시간 시뮬레이션 (3-5초)
-        processing_time = 3.5  # 실제 FaceFusion은 더 오래 걸릴 수 있음
-        logger.info(f"AI 처리 시뮬레이션 중... ({processing_time}초 대기)")
-        await asyncio.sleep(processing_time)
+        # 파일 경로 검증
+        source_file = Path(source_path)
+        target_file = Path(target_path)
+        output_file = Path(output_path)
 
-        # 2. 고유한 파일명 생성
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_id = str(uuid.uuid4())[:8]
-        extension = Path(original_filename).suffix or ".jpg"
-        filename = f"profile_{timestamp}_{unique_id}{extension}"
+        # 상대 경로를 절대 경로로 변환
+        if not source_file.is_absolute():
+            source_file = Path.cwd() / source_file
+        if not target_file.is_absolute():
+            target_file = Path.cwd() / target_file
 
-        # 3. 이미지 저장 (실제로는 원본 그대로 저장)
-        # 실제 FaceFusion 적용 시: 여기서 AI 모델을 통해 이미지 변환 수행
-        output_path = self.output_dir / filename
-        with open(output_path, "wb") as f:
-            f.write(image_data)
+        if not source_file.exists():
+            raise FileNotFoundError(f"Source image not found: {source_file}")
+        if not target_file.exists():
+            raise FileNotFoundError(f"Target image not found: {target_file}")
 
-        logger.info(f"프로필 이미지 생성 완료 (모의): {filename}")
-        logger.info("⚠️  실제 FaceFusion은 실행되지 않았습니다. 원본 이미지가 저장되었습니다.")
+        # 출력 디렉토리 생성
+        output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        return filename
+        logger.info(f"Starting face fusion:")
+        logger.info(f"  Source: {source_file}")
+        logger.info(f"  Target: {target_file}")
+        logger.info(f"  Output: {output_file}")
 
-    async def generate_talent_image(
+        try:
+            # FaceFusion state 설정
+            logger.info("Setting FaceFusion state...")
+            self._state_manager.set_item('source_paths', [str(source_file)])
+            self._state_manager.set_item('target_path', str(target_file))
+            self._state_manager.set_item('output_path', str(output_file))
+            logger.info("FaceFusion state set successfully")
+
+            # 얼굴 합성 실행
+            import time
+            start_time = time.time()
+
+            logger.info("Starting FaceFusion image_to_image.process()...")
+            error_code = self._image_to_image.process(start_time)
+            logger.info(f"FaceFusion process returned error code: {error_code}")
+
+            if error_code != 0:
+                raise RuntimeError(f"FaceFusion failed with error code: {error_code}")
+
+            # 출력 파일 생성 확인
+            if not output_file.exists():
+                raise RuntimeError(f"Output file not created: {output_file}")
+
+            elapsed = time.time() - start_time
+            logger.info(f"✅ Face fusion completed successfully in {elapsed:.2f}s: {output_file}")
+
+        except Exception as e:
+            logger.error(f"❌ Face fusion failed: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise RuntimeError(f"Face fusion failed: {str(e)}") from e
+
+    async def _mock_generate_image(
         self,
-        image_data: bytes,
-        original_filename: str
-    ) -> str:
+        source_path: str,
+        target_path: str,
+        output_path: str
+    ) -> None:
         """
-        탤런트쇼 이미지 생성 시뮬레이션
+        모의 이미지 생성 (mock mode)
 
-        실제로는 업로드된 이미지를 그대로 저장하고,
-        AI 처리 시간을 시뮬레이션하기 위해 딜레이를 추가합니다.
-
-        Args:
-            image_data: 업로드된 이미지 데이터 (bytes)
-            original_filename: 원본 파일명
-
-        Returns:
-            생성된 이미지 파일명
+        실제 FaceFusion을 실행하지 않고 타겟 이미지를 복사합니다.
         """
-        logger.info("탤런트쇼 이미지 생성 시작 (모의 실행)")
+        import shutil
+        import asyncio
 
-        # 1. AI 처리 시간 시뮬레이션 (4-6초)
-        processing_time = 4.5  # 탤런트쇼는 프로필보다 복잡할 수 있음
-        logger.info(f"AI 처리 시뮬레이션 중... ({processing_time}초 대기)")
-        await asyncio.sleep(processing_time)
+        logger.info("Mock mode: Copying target image to output")
 
-        # 2. 고유한 파일명 생성
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_id = str(uuid.uuid4())[:8]
-        extension = Path(original_filename).suffix or ".jpg"
-        filename = f"talent_{timestamp}_{unique_id}{extension}"
+        target_file = Path(target_path)
+        output_file = Path(output_path)
 
-        # 3. 이미지 저장 (실제로는 원본 그대로 저장)
-        # 실제 FaceFusion 적용 시: 여기서 AI 모델을 통해 이미지 변환 수행
-        output_path = self.output_dir / filename
-        with open(output_path, "wb") as f:
-            f.write(image_data)
+        # 상대 경로를 절대 경로로 변환
+        if not target_file.is_absolute():
+            target_file = Path.cwd() / target_file
 
-        logger.info(f"탤런트쇼 이미지 생성 완료 (모의): {filename}")
-        logger.info("⚠️  실제 FaceFusion은 실행되지 않았습니다. 원본 이미지가 저장되었습니다.")
+        if not target_file.exists():
+            raise FileNotFoundError(f"Target image not found: {target_file}")
 
-        return filename
+        # 출력 디렉토리 생성
+        output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    def cleanup_old_files(self, max_age_hours: int = 24):
-        """
-        오래된 생성 이미지 정리
+        # 타겟 이미지 복사 (모의 실행)
+        shutil.copy2(target_file, output_file)
 
-        Args:
-            max_age_hours: 보관할 최대 시간 (기본 24시간)
-        """
-        logger.info(f"{max_age_hours}시간 이상 된 파일 정리 중...")
+        # AI 처리 시뮬레이션
+        await asyncio.sleep(2.0)
 
-        import time
-        current_time = time.time()
-        deleted_count = 0
-
-        for file_path in self.output_dir.glob("*"):
-            if file_path.is_file():
-                file_age_hours = (current_time - file_path.stat().st_mtime) / 3600
-                if file_age_hours > max_age_hours:
-                    file_path.unlink()
-                    deleted_count += 1
-                    logger.info(f"삭제됨: {file_path.name}")
-
-        logger.info(f"정리 완료: {deleted_count}개 파일 삭제됨")
-
-
-# 실제 FaceFusion 적용 시 참고 사항:
-"""
-실제 FaceFusion을 적용하려면 다음 단계를 따르세요:
-
-1. FaceFusion 설치:
-   - FaceFusion GitHub 저장소에서 설치: https://github.com/facefusion/facefusion
-   - 필요한 AI 모델 다운로드
-   - GPU 드라이버 및 CUDA 설정 (선택사항, 성능 향상)
-
-2. 코드 수정:
-   - generate_profile_image() 함수에서:
-     * asyncio.sleep() 제거
-     * FaceFusion API 호출 추가
-     * 소스 이미지 + 타겟 이미지로 얼굴 합성
-
-   - generate_talent_image() 함수에서:
-     * asyncio.sleep() 제거
-     * FaceFusion API 호출 추가
-     * 다른 타겟 이미지 사용 (탤런트쇼 스타일)
-
-3. 타겟 이미지 준비:
-   - assets/ 디렉토리에 "나는솔로" 출연진 이미지 준비
-   - 프로필용 이미지 세트
-   - 탤런트쇼용 이미지 세트
-
-4. 성능 최적화:
-   - GPU 사용 설정
-   - 배치 처리 구현 (여러 사용자 동시 처리 시)
-   - 캐싱 전략 수립
-
-예시 코드 (FaceFusion 적용 시):
-    from facefusion import FaceFusion
-
-    async def generate_profile_image(self, image_data, original_filename):
-        # 1. 임시 파일로 저장
-        temp_input = self.output_dir / f"temp_{uuid.uuid4()}.jpg"
-        with open(temp_input, "wb") as f:
-            f.write(image_data)
-
-        # 2. 타겟 이미지 선택
-        target_image = random.choice(list(Path("assets/profile_targets").glob("*.jpg")))
-
-        # 3. FaceFusion 실행
-        facefusion = FaceFusion()
-        result = await facefusion.swap_face(
-            source=str(temp_input),
-            target=str(target_image),
-            output=str(output_path)
-        )
-
-        # 4. 정리
-        temp_input.unlink()
-
-        return filename
-"""
+        logger.info(f"Mock face fusion completed: {output_file}")

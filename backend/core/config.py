@@ -76,16 +76,20 @@ class FaceFusionSettings(BaseSettings):
     """FaceFusion AI 서비스 관련 설정"""
 
     mode: str = Field(
-        default="mock",
+        default="real",
         description="FaceFusion mode: 'mock' or 'real'"
     )
-    api_url: str = Field(
-        default="http://localhost:7860",
-        description="FaceFusion API URL (if real mode)"
+    project_path: str = Field(
+        default="../facefusion",
+        description="Path to facefusion project directory (added to sys.path for import)"
     )
-    timeout: int = Field(
-        default=30,
-        description="Request timeout in seconds"
+    face_swapper_model: str = Field(
+        default="inswapper_128",
+        description="Face swapper model to use (e.g., 'inswapper_128', 'blendswap_256')"
+    )
+    execution_providers: List[str] = Field(
+        default=["cpu"],
+        description="Execution providers for ONNX (e.g., ['cpu'], ['cuda'], ['coreml'])"
     )
 
     class Config:
